@@ -22,6 +22,8 @@ jobs:
           ref: ${{ inputs.source_ref }}
           path: game
           lfs: true
+          token: ${{ secrets.SOURCE_REPO_TOKEN }}
+          persist-credentials: false
       - name: Fetch optimized game models
         working-directory: game
         run: |
@@ -60,3 +62,4 @@ jobs:
           else
             gh release create "$tag" RIFTWATCH.apk --title "RIFTWATCH Android ${SOURCE_REF:0:7}" --notes "Installable Android development APK built from Ellesonntseare/RIFTWATCH commit $SOURCE_REF."
           fi
+
