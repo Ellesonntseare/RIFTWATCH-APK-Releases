@@ -1,0 +1,62 @@
+name: Publish Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: RIFTWATCH commit or branch to build
+        required: true
+        default: 970792c74fb2aa3d0d7d83dc32549f979b1ac6c1
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out game source
+        uses: actions/checkout@v4
+        with:
+          repository: Ellesonntseare/RIFTWATCH
+          ref: ${{ inputs.source_ref }}
+          path: game
+          lfs: true
+      - name: Fetch optimized game models
+        working-directory: game
+        run: |
+          git lfs pull --include="models/web/*.glb,models/serame-head.glb,models/rabbit_-_realistic_3d_model_demo_free.glb" --exclude=""
+          mkdir -p app/src/main/assets/models
+          cp models/web/*.glb app/src/main/assets/models/
+          cp models/serame-head.glb models/rabbit_-_realistic_3d_model_demo_free.glb app/src/main/assets/models/
+          for model in app/src/main/assets/models/*.glb; do
+            test "$(head -c 4 "$model")" = "glTF" || { echo "Missing model: $model"; exit 1; }
+          done
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Build APK
+        working-directory: game
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          cp game/app/build/outputs/apk/debug/app-debug.apk RIFTWATCH.apk
+          tag="apk-${SOURCE_REF:0:7}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" RIFTWATCH.apk --clobber
+          else
+            gh release create "$tag" RIFTWATCH.apk --title "RIFTWATCH Android ${SOURCE_REF:0:7}" --notes "Installable Android development APK built from Ellesonntseare/RIFTWATCH commit $SOURCE_REF."
+          fi
